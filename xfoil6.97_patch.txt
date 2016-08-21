@@ -1,0 +1,604 @@
+diff -Naur Xfoil/CHANGELOG xfoil.git/CHANGELOG
+--- Xfoil/CHANGELOG	1970-01-01 00:00:00.000000000 +0000
++++ xfoil.git/CHANGELOG	2016-08-21 08:33:40.551000000 +0000
+@@ -0,0 +1,12 @@
++
++CHANGELOG
++---------
++
++Date: 6/10/2013
++Author: David Lisk
++Modifications:
++1. Replaced one occurance of 2**31 with HUGE(0) to prevent compiler error in xoper.f using gfortran
++2. Added LERR variable declaration as type LOGICAL in pplot.f
++3. Added mockplot.f which provides empty versions of routines required for plot functionality
++4. Updated Makefile to remove unnecessary references and add mockplot.f
++
+diff -Naur Xfoil/bin/Makefile xfoil.git/bin/Makefile
+--- Xfoil/bin/Makefile	2008-04-07 21:05:29.000000000 +0000
++++ xfoil.git/bin/Makefile	2016-08-21 08:33:40.550000000 +0000
+@@ -3,13 +3,14 @@
+ # H.Youngren 4/24/01
+ # M.Drela
+ #*********************************************************
+-
++# Modifed to remove plot library for server version
++# David Lisk, XS Research Ltd, 6/10/2013
++#*********************************************************
+ 
+ SHELL = sh
+-#BINDIR = $(HOME)/bin/
+ BINDIR = .
+ 
+-PROGS = xfoil pplot pxplot
++PROGS = xfoil
+ 
+ SRC = ../src
+ OSRC = ../osrc
+@@ -17,7 +18,7 @@
+ XFOILOBJ = xfoil.o xpanel.o xoper.o xtcam.o xgdes.o xqdes.o xmdes.o \
+ xsolve.o xbl.o xblsys.o xpol.o xplots.o pntops.o xgeom.o xutils.o modify.o \
+ blplot.o polplt.o aread.o naca.o spline.o plutil.o iopol.o gui.o sort.o \
+-dplot.o profil.o
++dplot.o profil.o mockplot.o
+ 
+ PPLOTOBJ = pplot.o polplt.o sort.o iopol.o
+ PXPLOTOBJ = pxplot.o plutil.o gui.o
+@@ -30,92 +31,19 @@
+ OSOBJ = frplot0.o
+ 
+ # Use this for individual TS-wave frequency plotting
+-OSOBJ = frplot.o ntcalc.o osmap.o getosfile.o
+-
+-##----------------------------------------------------
+-PLTOBJ = ../plotlib/libPlt.a 
+-
+-# Use this if you have a copy of the plotlib as a system library
+-#PLTOBJ = -lPlt 
+-
+-# The extra location arg here is for Linux which places X libs in /usr/X11R6
+-PLTLIB = -L/usr/X11R6/lib -lX11
++#OSOBJ = frplot.o ntcalc.o osmap.o getosfile.o
+ 
+ ###================================================
+-###  Default compilers and flags
++###  Default compilers and flags for gfortran
+ ###  FFLOPT used for xsolve.f
+-FC = f77
+-FFLAGS  = -O 
+-FFLOPT  = -O
++FC = gfortran
++FFLAGS  = -O -fdefault-real-8 -fdefault-double-8
++FFLOPT  = -O -fdefault-real-8 -fdefault-double-8
+ INSTALLCMD = install -s
+ 
+ CC = cc
+ CFLAGS = -O -DUNDERSCORE
+ 
+-##--------------------------
+-
+-# Uncomment flags for desired machine...
+-
+-##--------------------------
+-### DEC Alpha with OSF and DEC f77/f90 compiler
+-#FC = f77
+-#FFLAGS = -fast -O4 -tune host
+-#FFLOPT = -fast -O4 -tune host
+-#FFLOPT = -fast -O5 -tune host -unroll 3
+-# Debug flags
+-#FFLAGS = -O0 -g
+-#FFLOPT = -fast -O4 -tune host
+-##--------------------------
+-### SGI setup
+-#FC = f77
+-#FFLAGS = -O2 -static
+-#FFLOPT = -O2 -static
+-##--------------------------
+-##  Uncomment for RS/6000
+-#FFLAGS = -O -qextname
+-#FFLOPT = -O -qextname
+-##--------------------------
+-##  Uncomment for HP-9000
+-#FFLAGS = -O +ppu
+-#FFLOPT = -O +ppu
+-#FTNLIB = -U77
+-##--------------------------
+-### Absoft Linux f77
+-#FC = f77
+-#FFLAGS = -O -f -s -W -B108 -N34
+-#FFLOPT = -O -f -s -W -B108 -N34
+-##--------------------------
+-### f2c/gcc compiler driver 
+-#FC = fort77
+-#FFLAGS = -O2 -fomit-frame-pointer
+-#FFLOPT = -O2 -fomit-frame-pointer
+-##--------------------------
+-### GNU g77
+-#FC = g77
+-#FFLAGS = -O3 -fomit-frame-pointer
+-#FFLOPT = -O3 -fomit-frame-pointer
+-# Debug flags (symbols, array bounds)
+-#FC = g77
+-#FFLAGS = -g -O0 -C
+-##--------------------------
+-### Intel Fortran Compiler
+-FC = ifort
+-FFLAGS = -O
+-FFLOPT = -O
+-#FTNLIB = -Vaxlib /usr/lib/C-ctype.o /usr/lib/C_name.o /usr/lib/ctype-info.o
+-#FTNLIB = -Vaxlib
+-#FTNLIB = -i_dynamic
+-
+-##--------------------------
+-### Double precision option
+-FFLAGS = -O -r8 -CB
+-FFLOPT = -O -r8 -CB
+-PLTOBJ = ../plotlib/libPltDP.a 
+-
+-FFLAGS = -O -r8 -ftrapuv -fpe0
+-FFLOPT = -O -r8 -ftrapuv -fpe0
+-
+-
+ all:	 $(PROGS)
+ 
+ install: 
+@@ -124,8 +52,7 @@
+ clean:
+ 	-/bin/rm $(PROGS)
+ 	-/bin/rm $(XFOILOBJ) $(XUTILOBJ) $(OSOBJ) $(PPLOTOBJ) $(PXPLOTOBJ)
+-#	-/bin/rm *.o
+-
++	-/bin/rm *.o
+ 
+ 
+ xfoil: $(XFOILOBJ) $(XUTILOBJ) $(OSOBJ)
+@@ -190,13 +117,15 @@
+ 	$(FC) -c $(FFLAGS)  $(SRC)/sort.f
+ profil.o: $(SRC)/profil.f
+ 	$(FC) -c $(FFLAGS)  $(SRC)/profil.f
++mockplot.o: $(SRC)/mockplot.f
++	$(FC) -c $(FFLAGS)  $(SRC)/mockplot.f
+ 
+-polplt.o: $(SRC)/polplt.f $(SRC)/PINDEX.INC
++polplt.o: $(SRC)/polplt.f $(SRC)/PINDEX.INC $(SRC)/mockplot.f
+ 	$(FC) -c $(FFLAGS)  $(SRC)/polplt.f
+ iopol.o: $(SRC)/iopol.f $(SRC)/PINDEX.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/iopol.f
+ 
+-pplot.o:  $(SRC)/pplot.f  $(SRC)/PPLOT.INC
++pplot.o:  $(SRC)/pplot.f  $(SRC)/PPLOT.INC $(SRC)/mockplot.f
+ 	$(FC) -c $(FFLAGS)  $(SRC)/pplot.f
+ pxplot.o: $(SRC)/pxplot.f $(SRC)/PXPLOT.INC
+ 	$(FC) -c $(FFLAGS)  $(SRC)/pxplot.f
+diff -Naur Xfoil/src/mockplot.f xfoil.git/src/mockplot.f
+--- Xfoil/src/mockplot.f	1970-01-01 00:00:00.000000000 +0000
++++ xfoil.git/src/mockplot.f	2016-08-21 08:33:40.548000000 +0000
+@@ -0,0 +1,211 @@
++C***********************************************************************
++C    Module:  mockplot.f
++C
++C    Copyright (C) 2013 XS Research Ltd
++C    
++C    Description:
++C    This file provides the necessary function calls to plot routines
++C    to allow compilation of the xfoil program without requiring
++C    libraries which are unnecessary for a server version.
++C
++C    This program is free software; you can redistribute it and/or
++C    modify
++C    it under the terms of the GNU General Public License as published
++C    by
++C    the Free Software Foundation; either version 2 of the License, or
++C    (at your option) any later version.
++C
++C    This program is distributed in the hope that it will be useful,
++C    but WITHOUT ANY WARRANTY; without even the implied warranty of
++C    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++C    GNU General Public License for more details.
++C
++C    You should have received a copy of the GNU General Public License
++C    along with this program; if not, write to the Free Software
++C    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++C***********************************************************************
++
++      SUBROUTINE NEWPEN(A)
++      RETURN
++      END
++
++      SUBROUTINE GETCOLOR(A)
++      RETURN
++      END
++
++      SUBROUTINE PLOT(A,B,C)
++      RETURN
++      END
++
++      SUBROUTINE NEWCOLORNAME(A)
++      RETURN
++      END
++
++      SUBROUTINE NEWCOLOR(A)
++      RETURN
++      END
++
++      SUBROUTINE PLFLUSH
++      RETURN
++      END
++
++      SUBROUTINE XAXIS(A,B,C,D,E,F,G,H)
++      RETURN
++      END
++
++      SUBROUTINE YAXIS(A,B,C,D,E,F,G,H)
++      RETURN
++      END
++
++      SUBROUTINE PLCHAR(A,B,C,D,E,F)
++      RETURN
++      END
++
++      SUBROUTINE PLMATH(A,B,C,D,E,F)
++      RETURN
++      END
++
++      SUBROUTINE PLNUMB(A,B,C,D,E,F)
++      RETURN
++      END
++
++      SUBROUTINE PLGRID(A,B,C,D,E,F,G)
++      RETURN
++      END
++
++      SUBROUTINE XYLINE(A,B,C,D,E,F,G,H)
++      RETURN
++      END
++
++      SUBROUTINE PLSYMB(A,B,C,D,E,F)
++      RETURN
++      END
++
++      SUBROUTINE PLEND
++      RETURN
++      END
++
++      SUBROUTINE AXISADJ(A,B,C,D,E)
++      RETURN
++      END
++
++      SUBROUTINE CLRZOOM
++      RETURN
++      END
++
++      SUBROUTINE USETZOOM(A,B)
++      RETURN
++      END
++
++      SUBROUTINE REPLOT
++      RETURN
++      END
++
++      SUBROUTINE GETCURSORXY(A,B,C)
++      RETURN
++      END
++
++      SUBROUTINE ANNOT(A)
++      RETURN
++      END
++
++      SUBROUTINE GETLASTXY(A,B)
++      RETURN
++      END
++
++      SUBROUTINE PLOTABS(A,B,C)
++      RETURN
++      END
++
++      SUBROUTINE PLOPEN(A,B,C)
++      RETURN
++      END
++
++      SUBROUTINE GETWINSIZE(A,B)
++      RETURN
++      END
++
++      SUBROUTINE NEWCLIPABS(A,B,C,D)
++      RETURN
++      END
++
++      SUBROUTINE NEWFACTOR(A,B)
++      RETURN
++      END
++
++      SUBROUTINE GETPEN(A)
++      RETURN
++      END
++
++      SUBROUTINE GETFACTORS(A,B)
++      RETURN
++      END
++
++      SUBROUTINE NEWFACTORS(A,B)
++      RETURN
++      END
++
++      SUBROUTINE XYSYMB(A,B,C,D,E,F,G,H,I)
++      RETURN
++      END
++
++      SUBROUTINE GETCLIPABS(A,B,C,D)
++      RETURN
++      END
++
++      SUBROUTINE CLRCLIP
++      RETURN
++      END
++
++      SUBROUTINE GETORIGIN(A,B)
++      RETURN
++      END
++
++      SUBROUTINE COLORMAPDEFAULT
++      RETURN
++      END
++
++      SUBROUTINE GETNUMCOLOR(A)
++      RETURN
++      END
++
++      SUBROUTINE PLINITIALIZE
++      RETURN
++      END
++
++      SUBROUTINE PLCLOSE
++      RETURN
++      END
++
++      SUBROUTINE GETCLIP(A,B,C,D)
++      RETURN
++      END
++
++      SUBROUTINE COLORSPECTRUMHUES(A,B)
++      RETURN
++      END
++
++      SUBROUTINE GETPAT(A)
++      RETURN
++      END
++
++      SUBROUTINE NEWPAT(A)
++      RETURN
++      END
++      
++      SUBROUTINE NEWCLIP(A,B,C,D)
++      RETURN
++      END
++
++      SUBROUTINE PLSLAN(A,B,C,D,E,F,G)
++      RETURN
++      END
++
++      SUBROUTINE GETCOLORRGB(A,B,C,D,E)
++      RETURN
++      END
++
++      SUBROUTINE NEWCOLORRGB(A,B,C)
++      RETURN
++      END
++
+diff -Naur Xfoil/src/pplot.f xfoil.git/src/pplot.f
+--- Xfoil/src/pplot.f	2007-10-25 00:28:23.000000000 +0000
++++ xfoil.git/src/pplot.f	2016-08-21 08:33:40.549000000 +0000
+@@ -36,7 +36,7 @@
+       PROGRAM PPLOT
+       INCLUDE 'PPLOT.INC'
+ C
+-      LOGICAL ERROR, LGETFN
++      LOGICAL ERROR, LGETFN, LERR
+       REAL RINP(10)
+       REAL CPOLO(NAX,IPTOT,NPX), VPOLO(NAX,2,NPX)
+ C
+diff -Naur Xfoil/src/xoper.f xfoil.git/src/xoper.f
+--- Xfoil/src/xoper.f	2008-04-08 00:21:23.000000000 +0000
++++ xfoil.git/src/xoper.f	2016-08-21 08:33:40.549000000 +0000
+@@ -114,7 +114,7 @@
+ C---- don't try to read integers, since might get integer overflow
+       DO I=1, NINPUT
+         IF(ABS(RINPUT(I)) .GT. 2.1E9) THEN
+-         IINPUT(I) = 2**31
++         IINPUT(I) = HUGE(0)
+         ELSE
+          IINPUT(I) = INT(RINPUT(I))
+         ENDIF
+@@ -1872,64 +1872,64 @@
+ 
+       SUBROUTINE BLDUMP(FNAME1)
+       INCLUDE 'XFOIL.INC'
+-      CHARACTER*(*) FNAME1
++C      CHARACTER*(*) FNAME1
+ C
+-      CHARACTER*80 FILDEF
++C      CHARACTER*80 FILDEF
+ C
+-      CHARACTER*1 DELIM
++C      CHARACTER*1 DELIM
+       CHARACTER*256 LINE
+ C
+-      IF    (KDELIM.EQ.0) THEN
+-       DELIM = ' '
+-      ELSEIF(KDELIM.EQ.1) THEN
+-       DELIM = ','
+-      ELSEIF(KDELIM.EQ.2) THEN
+-       DELIM = CHAR(9)
+-      ELSE
+-       WRITE(*,*) '? Illegal delimiter.  Using blank.'
+-       DELIM = ' '
+-      ENDIF
++C      IF    (KDELIM.EQ.0) THEN
++C       DELIM = ' '
++C      ELSEIF(KDELIM.EQ.1) THEN
++C       DELIM = ','
++C      ELSEIF(KDELIM.EQ.2) THEN
++C       DELIM = CHAR(9)
++C      ELSE
++C       WRITE(*,*) '? Illegal delimiter.  Using blank.'
++C       DELIM = ' '
++C      ENDIF
+ C
+  1000 FORMAT(50A)
+ C
+-      IF(FNAME1(1:1).NE.' ') THEN
+-       FNAME = FNAME1
+-      ELSE
++C      IF(FNAME1(1:1).NE.' ') THEN
++C       FNAME = FNAME1
++C      ELSE
+ C----- no argument... get it somehow
+-       IF(NPREFIX.GT.0) THEN
++C       IF(NPREFIX.GT.0) THEN
+ C------ offer default using existing prefix
+-        FILDEF = PREFIX(1:NPREFIX) // '.bl'
+-        WRITE(*,1100) FILDEF
+- 1100   FORMAT(/' Enter filename:  ', A)
+-        READ(*,1000) FNAME
+-        CALL STRIP(FNAME,NFN)
+-        IF(NFN.EQ.0) FNAME = FILDEF
+-       ELSE
++C        FILDEF = PREFIX(1:NPREFIX) // '.bl'
++C        WRITE(*,1100) FILDEF
++C 1100   FORMAT(/' Enter filename:  ', A)
++C        READ(*,1000) FNAME
++C        CALL STRIP(FNAME,NFN)
++C        IF(NFN.EQ.0) FNAME = FILDEF
++C       ELSE
+ C------ nothing available... just ask for filename
+-        CALL ASKS('Enter filename^',FNAME)
+-       ENDIF
+-      ENDIF
+-C
+-      LU = 19
+-      OPEN(LU,FILE=FNAME,STATUS='UNKNOWN')
+-      REWIND(LU)
++C        CALL ASKS('Enter filename^',FNAME)
++C       ENDIF
++C      ENDIF
++C
++C      LU = 19
++C      OPEN(LU,FILE=FNAME,STATUS='UNKNOWN')
++C      REWIND(LU)
+ C
+-      IF(KDELIM.EQ.0) THEN
+-       WRITE(LU,1000)
++C      IF(KDELIM.EQ.0) THEN
++       WRITE(*,*)
+      & '#    s        x        y     Ue/Vinf    Dstar     Theta ',
+      & '     Cf       H'
+ C         1.23456  0.23451  0.23451  0.23451  0.012345  0.001234  0.004123  10.512
+-      ELSE
+-       WRITE(LU,1000)
+-     & '#s'     ,DELIM,
+-     & 'x'      ,DELIM,
+-     & 'y'      ,DELIM,
+-     & 'Ue/Vinf',DELIM,
+-     & 'Dstar'  ,DELIM,
+-     & 'Theta'  ,DELIM,
+-     & 'Cf'     ,DELIM,
+-     & 'H'
+-      ENDIF
++C      ELSE
++C       WRITE(LU,1000)
++C     & '#s'     ,DELIM,
++C     & 'x'      ,DELIM,
++C     & 'y'      ,DELIM,
++C     & 'Ue/Vinf',DELIM,
++C     & 'Dstar'  ,DELIM,
++C     & 'Theta'  ,DELIM,
++C     & 'Cf'     ,DELIM,
++C     & 'H'
++C      ENDIF
+ C
+       CALL COMSET
+       HSTINV = GAMM1*(MINF/QINF)**2 / (1.0 + 0.5*GAMM1*MINF**2)
+@@ -1962,24 +1962,24 @@
+         AMSQ = UE*UE*HSTINV / (GAMM1*(1.0 - 0.5*UE*UE*HSTINV))
+         CALL HKIN( H, AMSQ, HK, DUMMY, DUMMY)
+ C
+-        IF(KDELIM.EQ.0) THEN
+-         WRITE(LU,8500) S(I), X(I), Y(I), UE, DS, TH, CF, HK
++C        IF(KDELIM.EQ.0) THEN
++         WRITE(*,*) S(I), X(I), Y(I), UE, DS, TH, CF, HK
+  8500    FORMAT(1X, 4F9.5, 3F10.6, F10.3)
+ C
+-        ELSE
+-         WRITE(LINE,8510) 
+-     &     S(I),DELIM,
+-     &     X(I),DELIM,
+-     &     Y(I),DELIM,
+-     &     UE  ,DELIM,
+-     &     DS  ,DELIM,
+-     &     TH  ,DELIM,
+-     &     CF  ,DELIM,
+-     &     HK
+- 8510    FORMAT(1X, 4(F9.5,A), 3(F10.6,A), F10.3)
+-         CALL BSTRIP(LINE,NLINE)
+-         WRITE(LU,1000) LINE(1:NLINE)
+-        ENDIF
++C        ELSE
++C         WRITE(LINE,8510) 
++C     &     S(I),DELIM,
++C     &     X(I),DELIM,
++C     &     Y(I),DELIM,
++C     &     UE  ,DELIM,
++C     &     DS  ,DELIM,
++C     &     TH  ,DELIM,
++C     &     CF  ,DELIM,
++C     &     HK
++C 8510    FORMAT(1X, 4(F9.5,A), 3(F10.6,A), F10.3)
++C         CALL BSTRIP(LINE,NLINE)
++C         WRITE(*,*) LINE(1:NLINE)
++C        ENDIF
+ C
+   10  CONTINUE
+ C
+@@ -1996,26 +1996,26 @@
+           AMSQ = UE*UE*HSTINV / (GAMM1*(1.0 - 0.5*UE*UE*HSTINV))
+           CALL HKIN( H, AMSQ, HK, DUMMY, DUMMY)
+ C
+-          IF(KDELIM.EQ.0) THEN
+-           WRITE(LU,8500) S(I), X(I), Y(I), UE, DS, TH, CF, HK
++C          IF(KDELIM.EQ.0) THEN
++           WRITE(*,*) S(I), X(I), Y(I), UE, DS, TH, CF, HK
+ C
+-          ELSE
+-           WRITE(LINE,8510) 
+-     &      S(I),DELIM,
+-     &      X(I),DELIM,
+-     &      Y(I),DELIM,
+-     &      UE  ,DELIM,
+-     &      DS  ,DELIM,
+-     &      TH  ,DELIM,
+-     &      CF  ,DELIM,
+-     &      HK
+-           CALL BSTRIP(LINE,NLINE)
+-           WRITE(LU,1000) LINE(1:NLINE)
+-          ENDIF
++C          ELSE
++C           WRITE(LINE,8510) 
++C     &      S(I),DELIM,
++C     &      X(I),DELIM,
++C     &      Y(I),DELIM,
++C     &      UE  ,DELIM,
++C     &      DS  ,DELIM,
++C     &      TH  ,DELIM,
++C     &      CF  ,DELIM,
++C     &      HK
++C           CALL BSTRIP(LINE,NLINE)
++C           WRITE(*,*) LINE(1:NLINE)
++C          ENDIF
+  20     CONTINUE
+       ENDIF
+ C
+-      CLOSE(LU)
++C      CLOSE(LU)
+       RETURN
+       END ! BLDUMP
+ 
